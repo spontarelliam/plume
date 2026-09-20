@@ -508,7 +508,13 @@ class MainWidget(QWidget, CommonCommand):
         if index != -1:
             self.workingcopies_combobox.setCurrentIndex(index)
 
-        self.svn_model.refresh()
+        path = self.workingcopies_combobox.currentText()
+        if path and not self.svn_model.isLoaded():
+            # A working copy is shown in the combobox but was never loaded
+            # (eg. first run: 'activated' only fires on a user selection).
+            self.setRootDir(path)
+        else:
+            self.svn_model.refresh()
 
     def onSVNTreeItemDoubleClicked(self, index):
         path = self.svn_model.filePath(index)
