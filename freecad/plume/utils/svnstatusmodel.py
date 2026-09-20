@@ -113,6 +113,10 @@ class SvnStatusModel(QAbstractItemModel):
         # Header item, so that headerData() works before a working copy is loaded
         self._root_item = SvnStatusItem(self._header_entry())
 
+        # No working copy loaded yet (set by load())
+        self._wc = None
+        self._client = None
+
     @staticmethod
     def _header_entry():
         return _STATUS_ENTRY(
@@ -150,6 +154,10 @@ class SvnStatusModel(QAbstractItemModel):
 
     def _setupModelData(self):
         self._root_item = SvnStatusItem(self._header_entry())
+
+        if self._client is None:
+            # nothing loaded yet: keep the header only
+            return
 
 
         tree = self._root_item
