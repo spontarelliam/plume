@@ -432,10 +432,12 @@ class ReleaseCommand(CommonCommand):
             filepaths.append(rp_filename)
 
         if release_ok:
-            if QMessageBox.question(None, "Confirm release", f'Do you want to release these files ? ...\n{"\n".join([svn.get_trunk_path(rootpath, subpath, sp) for sp in filepaths])}') == QMessageBox.StandardButton.Yes:
+            # (backslashes are not allowed inside f-string expressions before Python 3.12)
+            released_paths = "\n".join([svn.get_trunk_path(rootpath, subpath, sp) for sp in filepaths])
+            if QMessageBox.question(None, "Confirm release", f'Do you want to release these files ? ...\n{released_paths}') == QMessageBox.StandardButton.Yes:
                 svn.release(rootpath, subpath, release_name, version, revision, filepaths=filepaths)
 
-                QMessageBox.information(None, "Release ok", f'released : \n{"\n".join([svn.get_trunk_path(rootpath, subpath, sp) for sp in filepaths])}')
+                QMessageBox.information(None, "Release ok", f'released : \n{released_paths}')
 
         else:
             QMessageBox.warning(None, "Can't release", "\n".join(errors_msgs))
