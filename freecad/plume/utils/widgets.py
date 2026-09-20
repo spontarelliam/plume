@@ -1,4 +1,6 @@
 import os
+import html
+import traceback
 from PySide import QtWidgets, QtCore
 
 from PySide.QtCore import QModelIndex, Qt, Signal
@@ -11,6 +13,7 @@ import FreeCADGui as Gui
 from freecad.plume.pl_tools import UIPATH, ICONPATH, TRANSLATIONSPATH, translate
 from freecad.plume.utils.svnstatusmodel import SvnStatusModel
 from freecad.plume.utils.inventreemodel import InventreeModel
+from freecad.plume.utils.inventree_check import Diagnosis, InventreeSetupError, diagnose_inventree
 from freecad.plume.utils.selector import PlumeSelection
 
 from freecad.plume.utils.plume_svn import PlumeSvn
@@ -426,6 +429,35 @@ class MainWidget(QWidget, CommonCommand):
         self.inventree_tree = QTreeView()
         self.inventree_tree.setModel(self.inventree_model)
 
+        # explains what is missing or wrong when InvenTree is not set up (yet)
+        self.inventree_status_label = QLabel()
+        self.inventree_status_label.setWordWrap(True)
+        self.inventree_status_label.setTextFormat(Qt.TextFormat.RichText)
+
+        prefs_button = QPushButton("Repository preferences...")
+        prefs_button.clicked.connect(self.onInventreePreferences)
+        credentials_button = QPushButton("Set credentials...")
+        credentials_button.clicked.connect(self.onInventreeCredentials)
+        retry_button = QPushButton("Retry")
+        retry_button.clicked.connect(self.updateInventree)
+
+        banner_buttons = QHBoxLayout()
+        banner_buttons.addWidget(prefs_button)
+        banner_buttons.addWidget(credentials_button)
+        banner_buttons.addWidget(retry_button)
+        banner_buttons.addStretch()
+
+        self.inventree_banner = QWidget()
+        banner_layout = QVBoxLayout(self.inventree_banner)
+        banner_layout.addWidget(self.inventree_status_label)
+        banner_layout.addLayout(banner_buttons)
+        self.inventree_banner.hide()
+
+        self.inventree_tab = QWidget()
+        inventree_layout = QVBoxLayout(self.inventree_tab)
+        inventree_layout.addWidget(self.inventree_banner)
+        inventree_layout.addWidget(self.inventree_tree)
+
 
         # MENU
         self.refreshButton = QPushButton('Refresh')
@@ -454,7 +486,7 @@ class MainWidget(QWidget, CommonCommand):
         # MAIN Layout
         toolbox = QTabWidget()
         toolbox.addTab(self.svn_tree, "Working Copy")
-        toolbox.addTab(self.inventree_tree, "Inventree")
+        toolbox.addTab(self.inventree_tab, "Inventree")
 
         l = QVBoxLayout()
         l.addWidget(menu_widget)
@@ -485,9 +517,57 @@ class MainWidget(QWidget, CommonCommand):
         self.svn_model.load(path)
         PlumeSelection.instance().resetTreeSelection()
 
-        # InvenTree is optional until a server URL is set in the repository preferences
-        if self.config().get('inventree_url'):
-            self.inventree_model.load(self.inventree())
+        self.updateInventree()
+
+    def showInventreeProblem(self, diagnosis):
+        text = f"<b>{html.escape(diagnosis.summary)}</b>"
+        if diagnosis.details:
+            text += "<br>" + html.escape(diagnosis.details).replace("\n", "<br>")
+        self.inventree_status_label.setText(text)
+        self.inventree_banner.show()
+
+    def updateInventree(self):
+        """
+        Load the InvenTree parts tree. If InvenTree is not (correctly) set up
+        for this repository, say what is missing instead.
+        """
+        # start empty, so nothing stale is kept from another working copy
+        self.inventree_model = InventreeModel()
+        self.inventree_tree.setModel(self.inventree_model)
+
+        if not App.ParamGet("User parameter:BaseApp/Preferences/Plume").GetString("CurrentWorkingCopy"):
+            self.showInventreeProblem(Diagnosis("no_working_copy", "No working copy selected."))
+            return
+
+        try:
+            self.inventree_model.load(self.inventree(ask_credentials=False))
+        except InventreeSetupError as e:
+            self.showInventreeProblem(e.diagnosis)
+        except Exception as e:
+            App.Console.PrintError(traceback.format_exc())
+            self.showInventreeProblem(
+                Diagnosis("error", "Could not read the parts from InvenTree.", f"{type(e).__name__}: {e}")
+            )
+        else:
+            self.inventree_banner.hide()
+
+    def onInventreePreferences(self):
+        wc = App.ParamGet("User parameter:BaseApp/Preferences/Plume").GetString("CurrentWorkingCopy")
+        if wc:
+            RepositoryPreferencesDialog(wc).exec()
+            self.updateInventree()
+
+    def onInventreeCredentials(self):
+        wc = App.ParamGet("User parameter:BaseApp/Preferences/Plume").GetString("CurrentWorkingCopy")
+        if not wc:
+            return
+
+        url = (self.config().get('inventree_url') or '').strip()
+        if not url:
+            # the server address comes first
+            self.showInventreeProblem(diagnose_inventree(url))
+        elif self.ask_inventree_credentials(url) is not None:
+            self.updateInventree()
 
 
     def onSVNTreeSelectionChanged(self, selected, deselected):
