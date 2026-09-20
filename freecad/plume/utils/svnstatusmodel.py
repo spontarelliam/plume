@@ -149,6 +149,9 @@ class SvnStatusModel(QAbstractItemModel):
 
         self._setupModelData()
 
+    def isLoaded(self):
+        return self._client is not None
+
     def refresh(self):
         self._setupModelData()
 
