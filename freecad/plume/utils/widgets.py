@@ -500,6 +500,14 @@ class MainWidget(QWidget, CommonCommand):
 
     def refresh(self):
         PlumeSelection.instance().resetTreeSelection()
+
+        # pick up working copies added or removed since this panel was created
+        current = self.workingcopies_combobox.currentText()
+        self.refreshWorkingCopies()
+        index = self.workingcopies_combobox.findText(current)
+        if index != -1:
+            self.workingcopies_combobox.setCurrentIndex(index)
+
         self.svn_model.refresh()
 
     def onSVNTreeItemDoubleClicked(self, index):
