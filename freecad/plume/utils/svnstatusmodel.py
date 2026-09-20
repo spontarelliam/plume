@@ -110,8 +110,21 @@ class SvnStatusModel(QAbstractItemModel):
     def __init__(self, parent=None) :
         super().__init__(parent)
 
-        root_data = ['Name', 'Type']
-        self._root_item = SvnStatusItem(root_data)
+        # Header item, so that headerData() works before a working copy is loaded
+        self._root_item = SvnStatusItem(self._header_entry())
+
+    @staticmethod
+    def _header_entry():
+        return _STATUS_ENTRY(
+            filename="FileName",
+            type_raw_name="Type",
+            revision="Revision",
+            last_committed_author="Last Auth",
+            last_committed_revision="last Revision",
+            switched="Switched",
+            external="External",
+            locked="Locked",
+        )
 
 
 
@@ -136,8 +149,7 @@ class SvnStatusModel(QAbstractItemModel):
         self._setupModelData()
 
     def _setupModelData(self):
-        root_data = _STATUS_ENTRY(filename="FileName", type_raw_name="Type", revision="Revision", last_committed_author="Last Auth", last_committed_revision="last Revision", switched="Switched", external="External", locked="Locked")
-        self._root_item = SvnStatusItem(root_data)
+        self._root_item = SvnStatusItem(self._header_entry())
 
 
         tree = self._root_item
