@@ -4,7 +4,7 @@ import traceback
 from PySide import QtWidgets, QtCore
 
 from PySide.QtCore import QModelIndex, Qt, Signal
-from PySide.QtWidgets import QDialog, QGridLayout, QComboBox, QListWidget, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QListWidgetItem, QCheckBox, QTextEdit, QLabel,  QWidget, QTreeView, QListView, QVBoxLayout, QHBoxLayout, QCompleter, QTabWidget
+from PySide.QtWidgets import QDialog, QGridLayout, QComboBox, QListWidget, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QListWidgetItem, QCheckBox, QTextEdit, QLabel,  QWidget, QTreeView, QListView, QVBoxLayout, QHBoxLayout, QCompleter, QTabWidget, QMessageBox
 from PySide.QtGui import QBrush, QColorConstants, QColor, QIcon
 
 import FreeCAD as App
@@ -13,7 +13,7 @@ import FreeCADGui as Gui
 from freecad.plume.pl_tools import UIPATH, ICONPATH, TRANSLATIONSPATH, translate
 from freecad.plume.utils.svnstatusmodel import SvnStatusModel
 from freecad.plume.utils.inventreemodel import InventreeModel
-from freecad.plume.utils.inventree_check import Diagnosis, InventreeSetupError, diagnose_inventree
+from freecad.plume.utils.inventree_check import Diagnosis, InventreeSetupError
 from freecad.plume.utils.selector import PlumeSelection
 
 from freecad.plume.utils.plume_svn import PlumeSvn
@@ -551,21 +551,38 @@ class MainWidget(QWidget, CommonCommand):
         else:
             self.inventree_banner.hide()
 
-    def onInventreePreferences(self):
+    def currentWorkingCopyOrWarn(self):
+        """Path of the current working copy. Tells the user, and returns None, if there is none."""
         wc = App.ParamGet("User parameter:BaseApp/Preferences/Plume").GetString("CurrentWorkingCopy")
+        if not wc:
+            QMessageBox.information(
+                self,
+                "No working copy selected",
+                "InvenTree is set up per repository: select a working copy in the list first.",
+            )
+        return wc or None
+
+    def onInventreePreferences(self):
+        wc = self.currentWorkingCopyOrWarn()
         if wc:
             RepositoryPreferencesDialog(wc).exec()
             self.updateInventree()
 
     def onInventreeCredentials(self):
-        wc = App.ParamGet("User parameter:BaseApp/Preferences/Plume").GetString("CurrentWorkingCopy")
-        if not wc:
+        if not self.currentWorkingCopyOrWarn():
             return
 
         url = (self.config().get('inventree_url') or '').strip()
         if not url:
-            # the server address comes first
-            self.showInventreeProblem(diagnose_inventree(url))
+            # credentials are stored per server: the server address comes first
+            answer = QMessageBox.question(
+                self,
+                "InvenTree server needed",
+                "The login is stored per InvenTree server, and no server address is set for this repository yet.\n\n"
+                "Open the repository preferences to enter it now?",
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                self.onInventreePreferences()
         elif self.ask_inventree_credentials(url) is not None:
             self.updateInventree()
 
