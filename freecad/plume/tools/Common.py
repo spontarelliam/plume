@@ -95,6 +95,8 @@ class CommonCommand:
     def inventree(self):
         repo_config = self.config()
         url = repo_config['inventree_url']
+        if not url:
+            raise ValueError('No InvenTree URL configured: set it in the "Repository preferences"')
 
         param = App.ParamGet("User parameter:BaseApp/Preferences/Plume")
         if param.IsEmpty():

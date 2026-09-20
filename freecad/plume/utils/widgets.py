@@ -485,7 +485,9 @@ class MainWidget(QWidget, CommonCommand):
         self.svn_model.load(path)
         PlumeSelection.instance().resetTreeSelection()
 
-        self.inventree_model.load(self.inventree())
+        # InvenTree is optional until a server URL is set in the repository preferences
+        if self.config().get('inventree_url'):
+            self.inventree_model.load(self.inventree())
 
 
     def onSVNTreeSelectionChanged(self, selected, deselected):
