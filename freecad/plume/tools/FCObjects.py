@@ -15,13 +15,12 @@ from freecad.plume.utils.fc_utils import create_thumbnail, is_fastener, get_fast
 
 from freecad.plume.tools.Common import CommonCommand, catch_svn
 
-from freecad.frameforge.create_bom import (
-    group_links,
-    group_profiles,
-    make_bom,
-    make_cut_list,
-    traverse_assembly,
-)
+# FrameForge is optional: it is only needed to export beam/profile BOMs
+# for "FrameForgeAssembly" objects.
+try:
+    from freecad.frameforge.create_bom import traverse_assembly
+except ImportError:
+    traverse_assembly = None
 
 class InitializePlumeObjectCommand(CommonCommand):
     def GetResources(self):
@@ -519,6 +518,12 @@ class PublishPartCommand(CommonCommand):
 
             # case for frameforge profiles
             if root_obj.PlType == "FrameForgeAssembly":  # TODO what about frameforge object ? are they assembly ?
+                if traverse_assembly is None:
+                    msg = "The FrameForge workbench is required to publish a FrameForgeAssembly. Please install it."
+                    self.log(msg)
+                    QMessageBox.warning(None, "ERROR", msg)
+                    return
+
                 profiles_data = []
                 links_data = []
                 traverse_assembly(

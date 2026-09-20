@@ -23,8 +23,9 @@ class ManageSubversionWorkingCopiesDialog(QDialog):
         super().__init__(*args, **kwargs)
 
         param = App.ParamGet("User parameter:BaseApp/Preferences/Plume")
+        wcp = []
         if not param.IsEmpty():
-            wcp = param.GetString("WorkingCopy Available Paths").split(';')
+            wcp = [p for p in param.GetString("WorkingCopy Available Paths").split(';') if p]
 
         self.setWindowTitle('SVN Working Copies')
         # self.setWindowIcon(QIcon('./assets/wishlist.png'))
@@ -469,8 +470,9 @@ class MainWidget(QWidget, CommonCommand):
         self.workingcopies_combobox.clear()
 
         param = App.ParamGet("User parameter:BaseApp/Preferences/Plume")
+        wcp = []
         if not param.IsEmpty():
-            wcp = param.GetString("WorkingCopy Available Paths").split(';')
+            wcp = [p for p in param.GetString("WorkingCopy Available Paths").split(';') if p]
 
         self.workingcopies_combobox.addItems(wcp)
         PlumeSelection.instance().resetTreeSelection()
