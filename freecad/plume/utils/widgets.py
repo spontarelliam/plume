@@ -4,14 +4,14 @@ import traceback
 from PySide import QtWidgets, QtCore
 
 from PySide.QtCore import QModelIndex, QTimer, Qt, Signal, QItemSelection, QItemSelectionModel
-from PySide.QtWidgets import QDialog, QGridLayout, QComboBox, QListWidget, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QListWidgetItem, QCheckBox, QTextEdit, QLabel,  QWidget, QTreeView, QListView, QVBoxLayout, QHBoxLayout, QCompleter, QTabWidget, QMessageBox, QApplication
+from PySide.QtWidgets import QDialog, QGridLayout, QComboBox, QListWidget, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QListWidgetItem, QCheckBox, QTextEdit, QLabel,  QWidget, QTreeView, QListView, QVBoxLayout, QHBoxLayout, QCompleter, QTabWidget, QMessageBox, QApplication, QHeaderView
 from PySide.QtGui import QBrush, QColorConstants, QColor, QIcon
 
 import FreeCAD as App
 import FreeCADGui as Gui
 
 from freecad.plume.pl_tools import UIPATH, ICONPATH, TRANSLATIONSPATH, translate
-from freecad.plume.utils.svnstatusmodel import SvnStatusModel
+from freecad.plume.utils.svnstatusmodel import SvnStatusModel, SvnStatusItem
 from freecad.plume.utils.inventreemodel import InventreeModel
 from freecad.plume.utils.inventree_check import Diagnosis, InventreeSetupError
 from freecad.plume.utils.selector import PlumeSelection, RepositoryEvents
@@ -430,6 +430,15 @@ class MainWidget(QWidget, CommonCommand):
         self.svn_tree.setModel(self.svn_model)
         self.svn_tree.selectionModel().selectionChanged.connect(self.onSVNTreeSelectionChanged)
         self.svn_tree.doubleClicked.connect(self.onSVNTreeItemDoubleClicked)
+        # the revision columns are only as wide as their title (and their numbers, if wider)
+        for name in ("revision", "last_committed_revision"):
+            self.svn_tree.header().setSectionResizeMode(
+                SvnStatusItem.COLUMNS.index(name), QHeaderView.ResizeMode.ResizeToContents
+            )
+        # the Filename column fits its content, up to a limit; refit when the rows change
+        self.svn_model.modelReset.connect(self.fitFilenameColumn)
+        self.svn_tree.expanded.connect(self.fitFilenameColumn)
+        self.svn_tree.collapsed.connect(self.fitFilenameColumn)
         self._keep_selection = False  # True while the selection is set by the code, not by the user
 
         # reload the status when a command (lock, commit...) changes the working copy
@@ -614,6 +623,30 @@ class MainWidget(QWidget, CommonCommand):
             selector.setTreeSelection(paths)
         else:
             selector.resetTreeSelection()
+
+    MAX_FILENAME_CHARS = 30
+
+    def fitFilenameColumn(self, *args):
+        """Width of the Filename column: the widest visible name (with its indentation and icon), a name is cut at MAX_FILENAME_CHARS"""
+        view = self.svn_tree
+        model = self.svn_model
+        column = SvnStatusItem.COLUMNS.index("filename")
+        metrics = view.fontMetrics()
+        max_text = metrics.horizontalAdvance("0" * self.MAX_FILENAME_CHARS)
+
+        def widest(parent, depth):
+            width = 0
+            for row in range(model.rowCount(parent)):
+                index = model.index(row, column, parent)
+                text_width = metrics.horizontalAdvance(model.data(index, Qt.ItemDataRole.DisplayRole) or "")
+                # size of the item (icon, text, margins) as the view would draw it, with the text cut if too long
+                item_width = view.sizeHintForIndex(index).width() - text_width + min(text_width, max_text)
+                width = max(width, item_width + (depth + 1) * view.indentation())
+                if view.isExpanded(index):
+                    width = max(width, widest(index, depth + 1))
+            return width
+
+        view.setColumnWidth(column, max(widest(QModelIndex(), 0), view.header().sectionSizeHint(column)))
 
     def selectDependencies(self):
         """

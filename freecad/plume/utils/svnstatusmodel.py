@@ -34,8 +34,8 @@ class SvnStatusItem:
         "revision",
         "last_committed_revision",
         "last_committed_author",
-        "switched",
         "locked",
+        "switched",
         "external"
     ]
 
