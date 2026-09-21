@@ -13,7 +13,7 @@ from freecad.plume.svn.exception import SvnException
 from freecad.plume.utils.plume_inventree import PlumeInventree
 from freecad.plume.utils.inventree_check import diagnose_inventree, InventreeSetupError
 from freecad.plume.utils.plume_svn import PlumeSvn, PlumeSvnException
-from freecad.plume.utils.selector import PlumeSelection
+from freecad.plume.utils.selector import PlumeSelection, RepositoryEvents
 from freecad.plume.utils.fc_utils import read_repo_config, write_repo_config
 
 def catch_svn(func):
@@ -28,6 +28,20 @@ def catch_svn(func):
                 QMessageBox.critical(None, "InvenTree setup", str(e))
 
         return wrapper
+
+
+def refresh_panel(func):
+    """
+    For the commands that can change the state of the working copy (lock, commit...):
+    once done, even if it failed, ask the Plume panel to reload its status.
+    """
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        finally:
+            RepositoryEvents.instance().changed.emit()
+
+    return wrapper
 
 
 class CommonCommand:

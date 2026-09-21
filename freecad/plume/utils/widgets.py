@@ -3,7 +3,7 @@ import html
 import traceback
 from PySide import QtWidgets, QtCore
 
-from PySide.QtCore import QModelIndex, Qt, Signal
+from PySide.QtCore import QModelIndex, QTimer, Qt, Signal
 from PySide.QtWidgets import QDialog, QGridLayout, QComboBox, QListWidget, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QListWidgetItem, QCheckBox, QTextEdit, QLabel,  QWidget, QTreeView, QListView, QVBoxLayout, QHBoxLayout, QCompleter, QTabWidget, QMessageBox
 from PySide.QtGui import QBrush, QColorConstants, QColor, QIcon
 
@@ -14,7 +14,8 @@ from freecad.plume.pl_tools import UIPATH, ICONPATH, TRANSLATIONSPATH, translate
 from freecad.plume.utils.svnstatusmodel import SvnStatusModel
 from freecad.plume.utils.inventreemodel import InventreeModel
 from freecad.plume.utils.inventree_check import Diagnosis, InventreeSetupError
-from freecad.plume.utils.selector import PlumeSelection
+from freecad.plume.utils.selector import PlumeSelection, RepositoryEvents
+from freecad.plume.utils import treestate
 
 from freecad.plume.utils.plume_svn import PlumeSvn
 from freecad.plume.utils.fc_utils import read_repo_config, write_repo_config
@@ -423,6 +424,13 @@ class MainWidget(QWidget, CommonCommand):
         self.svn_tree.selectionModel().selectionChanged.connect(self.onSVNTreeSelectionChanged)
         self.svn_tree.doubleClicked.connect(self.onSVNTreeItemDoubleClicked)
 
+        # reload the status when a command (lock, commit...) changes the working copy
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.setInterval(200)  # several changes in a row give a single reload
+        self._refresh_timer.timeout.connect(self.refreshStatus)
+        RepositoryEvents.instance().changed.connect(self.onRepositoryChanged)
+
 
         # INVENTREE
         self.inventree_model = InventreeModel()
@@ -597,9 +605,31 @@ class MainWidget(QWidget, CommonCommand):
             path = self.svn_model.filePath(indexes[0])
             selector.setTreeSelection([path])
 
-    def refresh(self):
-        PlumeSelection.instance().resetTreeSelection()
+    def onRepositoryChanged(self):
+        self._refresh_timer.start()
 
+    def refreshStatus(self):
+        """Reload the SVN status, keeping the open folders and the selected item"""
+        if not self.svn_model.isLoaded():
+            return
+
+        root = QModelIndex()
+        expanded = treestate.collect_expanded(self.svn_tree, self.svn_model, root)
+        selected_indexes = self.svn_tree.selectionModel().selectedIndexes()
+        selected = self.svn_model.filePath(selected_indexes[0]) if selected_indexes else None
+
+        self.svn_model.refresh()
+
+        treestate.restore_expanded(self.svn_tree, self.svn_model, root, expanded)
+
+        index = treestate.find_index(self.svn_model, root, selected) if selected else None
+        if index is not None:
+            # selectionChanged updates PlumeSelection and the state of the commands
+            self.svn_tree.setCurrentIndex(index)
+        else:
+            PlumeSelection.instance().resetTreeSelection()
+
+    def refresh(self):
         # pick up working copies added or removed since this panel was created
         current = self.workingcopies_combobox.currentText()
         self.refreshWorkingCopies()
@@ -613,7 +643,7 @@ class MainWidget(QWidget, CommonCommand):
             # (eg. first run: 'activated' only fires on a user selection).
             self.setRootDir(path)
         else:
-            self.svn_model.refresh()
+            self.refreshStatus()
 
     def onSVNTreeItemDoubleClicked(self, index):
         path = self.svn_model.filePath(index)

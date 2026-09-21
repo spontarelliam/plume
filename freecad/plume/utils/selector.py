@@ -1,3 +1,5 @@
+from PySide.QtCore import QObject, Signal
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -26,6 +28,22 @@ class PlumeSelection:
         self.tree_selection = []
         Gui.Command.update()
 
+
+
+class RepositoryEvents(QObject):
+    """
+    Tells the Plume panel that the state of the working copy may have changed
+    (a file was locked, committed...), so that it reloads its status.
+    """
+    changed = Signal()
+
+    _instance = None
+
+    @classmethod
+    def instance(cls):
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
 
 
 class SelectionObserver:

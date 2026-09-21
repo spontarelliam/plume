@@ -8,7 +8,7 @@ import FreeCADGui as Gui
 from freecad.plume.pl_tools import UIPATH, ICONPATH, TRANSLATIONSPATH, translate
 from freecad.plume.utils.widgets import ManageSubversionWorkingCopiesDialog, RepositoryPreferencesDialog, CommitDialog
 
-from freecad.plume.tools.Common import CommonCommand, catch_svn
+from freecad.plume.tools.Common import CommonCommand, catch_svn, refresh_panel
 
 from freecad.plume.utils.plume_svn import PlumeSvn, PlumeSvnException
 
@@ -76,6 +76,7 @@ class SubversionUpdateCommand(CommonCommand):
     def IsActive(self):
         return self.svn() is not None
 
+    @refresh_panel
     @catch_svn
     def Activated(self):
         self.svn().update()
@@ -116,6 +117,7 @@ class SubversionCommitFileCommand(CommonCommand):
 
         return True
 
+    @refresh_panel
     @catch_svn
     def Activated(self):
         svn = self.svn()
@@ -177,6 +179,7 @@ class SubversionLockCommand(CommonCommand):
 
         return True
 
+    @refresh_panel
     @catch_svn
     def Activated(self):
         svn = self.svn()
@@ -228,6 +231,7 @@ class SubversionUnlockCommand(CommonCommand):
 
         return True
 
+    @refresh_panel
     @catch_svn
     def Activated(self):
         svn = self.svn()
