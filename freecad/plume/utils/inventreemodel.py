@@ -142,31 +142,45 @@ class InventreeModel(QAbstractItemModel):
     def _setupModelData(self):
         tree = self._root_item
 
-        for c in self._inventree.get_categories():
-            path = c.pathstring
+        # One request for all the parts, instead of one (or more) per category
+        parts_by_category = defaultdict(list)
+        for p in self._inventree.get_parts():
+            parts_by_category[getattr(p, "category", None)].append(p)
+
+        categories = self._inventree.get_categories()
+
+        # The parts of a category are also listed in the categories above it
+        parts_by_node = defaultdict(lambda: defaultdict(list))
+        for c in categories:
+            nodes = c.pathstring.split(os.sep)
+            for depth in range(1, len(nodes) + 1):
+                for p in parts_by_category.get(c.pk, []):
+                    parts_by_node[tuple(nodes[:depth])][p.IPN].append(p)
+
+        for c in categories:
             current = tree
-            for node in path.split(os.sep):
-                if not current.hasChild(node):
-                    new = InventreeModelItem(
-                        category=c.name, ipn=None, part=None,
-                        parent=current
-                    )
-                    current.addChild(node, new)
-                current = current.getChild(node)
+            path = []
+            for node in c.pathstring.split(os.sep):
+                path.append(node)
+                if current.hasChild(node):
+                    current = current.getChild(node)
+                    continue
 
+                new = InventreeModelItem(
+                    category=c.name, ipn=None, part=None,
+                    parent=current
+                )
+                current.addChild(node, new)
+                current = new
 
-                parts_by_ipn = defaultdict(list)
-                for p in self._inventree.get_parts(category=c.pk):
-                    parts_by_ipn[p.IPN].append(p)
-
-                for ipn in parts_by_ipn:
+                for ipn, parts in parts_by_node.get(tuple(path), {}).items():
                     new_part = InventreeModelItem(
                         category=None, ipn=ipn, part=None,
                         parent=current
                     )
                     current.addChild(ipn, new_part)
 
-                    for p in parts_by_ipn[ipn]:
+                    for p in parts:
                         new_part_version = InventreeModelItem(
                             category=None, ipn=None, part=p,
                             parent = new_part

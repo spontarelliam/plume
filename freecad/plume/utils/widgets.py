@@ -426,6 +426,10 @@ class MainWidget(QWidget, CommonCommand):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        # InvenTree is only loaded when its tab is shown: reading it from the server takes time
+        self.toolbox = None
+        self._inventree_stale = True
+
         # SVN
         self.svn_model = SvnStatusModel()
 
@@ -512,13 +516,14 @@ class MainWidget(QWidget, CommonCommand):
 
 
         # MAIN Layout
-        toolbox = QTabWidget()
-        toolbox.addTab(self.svn_tree, "Working Copy")
-        toolbox.addTab(self.inventree_tab, "Inventree")
+        self.toolbox = QTabWidget()
+        self.toolbox.addTab(self.svn_tree, "Working Copy")
+        self.toolbox.addTab(self.inventree_tab, "Inventree")
+        self.toolbox.currentChanged.connect(self.onTabChanged)
 
         l = QVBoxLayout()
         l.addWidget(menu_widget)
-        l.addWidget(toolbox)
+        l.addWidget(self.toolbox)
 
         self.setLayout(l)
 
@@ -554,14 +559,24 @@ class MainWidget(QWidget, CommonCommand):
         self.inventree_status_label.setText(text)
         self.inventree_banner.show()
 
+    def onTabChanged(self, index):
+        if self._inventree_stale and self.toolbox.widget(index) is self.inventree_tab:
+            self.updateInventree()
+
     def updateInventree(self):
         """
         Load the InvenTree parts tree. If InvenTree is not (correctly) set up
         for this repository, say what is missing instead.
+
+        Nothing is loaded while the InvenTree tab is not shown: it is done when the tab is shown.
         """
         # start empty, so nothing stale is kept from another working copy
         self.inventree_model = InventreeModel()
         self.inventree_tree.setModel(self.inventree_model)
+
+        self._inventree_stale = self.toolbox is None or self.toolbox.currentWidget() is not self.inventree_tab
+        if self._inventree_stale:
+            return
 
         if not App.ParamGet("User parameter:BaseApp/Preferences/Plume").GetString("CurrentWorkingCopy"):
             self.showInventreeProblem(Diagnosis("no_working_copy", "No working copy selected."))
