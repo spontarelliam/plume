@@ -156,29 +156,34 @@ class SvnStatusModel(QAbstractItemModel):
         self._setupModelData()
 
     def _setupModelData(self):
-        self._root_item = SvnStatusItem(self._header_entry())
+        # Tell the views that the whole model is replaced, otherwise they keep
+        # showing the old rows (new files/folders don't show up after a refresh)
+        self.beginResetModel()
+        try:
+            self._root_item = SvnStatusItem(self._header_entry())
 
-        if self._client is None:
-            # nothing loaded yet: keep the header only
-            return
+            if self._client is None:
+                # nothing loaded yet: keep the header only
+                return
 
+            tree = self._root_item
 
-        tree = self._root_item
+            for l in self._client.status(verbose=True):
+                path = os.path.relpath(l.path, start=self._wc)
+                if path == ".":
+                    continue
 
-        for l in self._client.status(verbose=True):
-            path = os.path.relpath(l.path, start=self._wc)
-            if path == ".":
-                continue
-            
-            current = tree
-            for node in path.split(os.sep):
-                if not current.hasChild(node):
-                    new = SvnStatusItem(
-                        l,
-                        parent=current
-                    )
-                    current.addChild(node, new)
-                current = current.getChild(node)
+                current = tree
+                for node in path.split(os.sep):
+                    if not current.hasChild(node):
+                        new = SvnStatusItem(
+                            l,
+                            parent=current
+                        )
+                        current.addChild(node, new)
+                    current = current.getChild(node)
+        finally:
+            self.endResetModel()
 
 
     def columnCount(self, parent: QModelIndex = None) -> int:
