@@ -4,7 +4,7 @@ import traceback
 from PySide import QtWidgets, QtCore
 
 from PySide.QtCore import QModelIndex, QTimer, Qt, Signal, QItemSelection, QItemSelectionModel
-from PySide.QtWidgets import QDialog, QGridLayout, QComboBox, QListWidget, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QListWidgetItem, QCheckBox, QTextEdit, QLabel,  QWidget, QTreeView, QListView, QVBoxLayout, QHBoxLayout, QCompleter, QTabWidget, QMessageBox
+from PySide.QtWidgets import QDialog, QGridLayout, QComboBox, QListWidget, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QListWidgetItem, QCheckBox, QTextEdit, QLabel,  QWidget, QTreeView, QListView, QVBoxLayout, QHBoxLayout, QCompleter, QTabWidget, QMessageBox, QApplication
 from PySide.QtGui import QBrush, QColorConstants, QColor, QIcon
 
 import FreeCAD as App
@@ -15,7 +15,7 @@ from freecad.plume.utils.svnstatusmodel import SvnStatusModel
 from freecad.plume.utils.inventreemodel import InventreeModel
 from freecad.plume.utils.inventree_check import Diagnosis, InventreeSetupError
 from freecad.plume.utils.selector import PlumeSelection, RepositoryEvents
-from freecad.plume.utils import treestate
+from freecad.plume.utils import treestate, fcdeps
 
 from freecad.plume.utils.plume_svn import PlumeSvn
 from freecad.plume.utils.fc_utils import read_repo_config, write_repo_config
@@ -430,6 +430,7 @@ class MainWidget(QWidget, CommonCommand):
         self.svn_tree.setModel(self.svn_model)
         self.svn_tree.selectionModel().selectionChanged.connect(self.onSVNTreeSelectionChanged)
         self.svn_tree.doubleClicked.connect(self.onSVNTreeItemDoubleClicked)
+        self._keep_selection = False  # True while the selection is set by the code, not by the user
 
         # reload the status when a command (lock, commit...) changes the working copy
         self._refresh_timer = QTimer(self)
@@ -603,6 +604,9 @@ class MainWidget(QWidget, CommonCommand):
 
 
     def onSVNTreeSelectionChanged(self, selected, deselected):
+        if not self._keep_selection:
+            self.selectDependencies()
+
         selector = PlumeSelection.instance()
 
         paths = self.selectedPaths()
@@ -610,6 +614,42 @@ class MainWidget(QWidget, CommonCommand):
             selector.setTreeSelection(paths)
         else:
             selector.resetTreeSelection()
+
+    def selectDependencies(self):
+        """
+        When a single .FCStd file is clicked, select also the files it depends on
+        (the parts of an assembly...). Ctrl/Shift+click is a manual selection: left as is.
+        """
+        if QApplication.keyboardModifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier):
+            return
+
+        paths = self.selectedPaths()
+        if len(paths) != 1 or not paths[0].lower().endswith(".fcstd"):
+            return
+
+        root = QModelIndex()
+        indexes = [treestate.find_index(self.svn_model, root, p) for p in fcdeps.dependencies(paths[0])]
+        indexes = [i for i in indexes if i is not None]
+        if not indexes:
+            return
+
+        selection = QItemSelection()
+        for index in indexes:
+            selection.select(index, index)
+            parent = index.parent()
+            while parent.isValid():  # show the selected files, even in a closed folder
+                self.svn_tree.expand(parent)
+                parent = parent.parent()
+
+        self._keep_selection = True
+        try:
+            # selectionChanged is emitted again, and updates PlumeSelection
+            self.svn_tree.selectionModel().select(
+                selection,
+                QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows,
+            )
+        finally:
+            self._keep_selection = False
 
     def selectedPaths(self):
         """Paths of all the selected items (an item spans several columns: counted once)"""
@@ -644,10 +684,14 @@ class MainWidget(QWidget, CommonCommand):
             for index in indexes:
                 selection.select(index, index)
             selection_model = self.svn_tree.selectionModel()
-            selection_model.select(
-                selection,
-                QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows,
-            )
+            self._keep_selection = True  # the selection is restored as it was: no dependencies to add
+            try:
+                selection_model.select(
+                    selection,
+                    QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows,
+                )
+            finally:
+                self._keep_selection = False
             selection_model.setCurrentIndex(indexes[0], QItemSelectionModel.SelectionFlag.NoUpdate)
         else:
             PlumeSelection.instance().resetTreeSelection()
