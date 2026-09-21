@@ -107,6 +107,9 @@ class SvnStatusModel(QAbstractItemModel):
         "unversioned": QColor("#808080"),
     }
 
+    # Unversioned files with these extensions are not listed (FreeCAD backup files)
+    HIDDEN_UNVERSIONED_EXTENSIONS = (".fcbak",)
+
     def __init__(self, parent=None) :
         super().__init__(parent)
 
@@ -155,6 +158,16 @@ class SvnStatusModel(QAbstractItemModel):
     def refresh(self):
         self._setupModelData()
 
+    def _is_hidden(self, entry):
+        """
+        Files that are not worth showing: backups created by FreeCAD.
+        A backup that was added to the repository is still shown (to be removed).
+        """
+        return (
+            entry.type_raw_name == "unversioned"
+            and entry.path.lower().endswith(self.HIDDEN_UNVERSIONED_EXTENSIONS)
+        )
+
     def _setupModelData(self):
         # Tell the views that the whole model is replaced, otherwise they keep
         # showing the old rows (new files/folders don't show up after a refresh)
@@ -170,7 +183,7 @@ class SvnStatusModel(QAbstractItemModel):
 
             for l in self._client.status(verbose=True):
                 path = os.path.relpath(l.path, start=self._wc)
-                if path == ".":
+                if path == "." or self._is_hidden(l):
                     continue
 
                 current = tree
