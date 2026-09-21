@@ -2,7 +2,7 @@ import os
 import json
 from collections import defaultdict
 
-from PySide.QtWidgets import QMessageBox, QInputDialog
+from PySide.QtWidgets import QMessageBox, QInputDialog, QLineEdit
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -11,6 +11,7 @@ from freecad.plume.pl_tools import UIPATH, ICONPATH, TRANSLATIONSPATH, translate
 
 from freecad.plume.svn.exception import SvnException
 from freecad.plume.utils.plume_inventree import PlumeInventree
+from freecad.plume.utils.inventree_check import diagnose_inventree, InventreeSetupError
 from freecad.plume.utils.plume_svn import PlumeSvn, PlumeSvnException
 from freecad.plume.utils.selector import PlumeSelection
 from freecad.plume.utils.fc_utils import read_repo_config, write_repo_config
@@ -22,6 +23,9 @@ def catch_svn(func):
             except (PlumeSvnException, SvnException) as e:
                 App.Console.PrintMessage(f"SVN ERROR : {str(e)}")
                 QMessageBox.critical(None, "SVN ERROR", str(e))
+            except InventreeSetupError as e:
+                App.Console.PrintMessage(f"INVENTREE ERROR : {str(e)}\n")
+                QMessageBox.critical(None, "InvenTree setup", str(e))
 
         return wrapper
 
@@ -92,38 +96,71 @@ class CommonCommand:
 
 
 
-    def inventree(self):
-        repo_config = self.config()
-        url = repo_config['inventree_url']
-        if not url:
-            raise ValueError('No InvenTree URL configured: set it in the "Repository preferences"')
+    def stored_inventree_credentials(self, url):
+        """
+        Login stored for this InvenTree server: {"user", "password", "token"}, or None
+        """
+        param = App.ParamGet("User parameter:BaseApp/Preferences/Plume")
+        raw_creds = param.GetString("InvenTree Credentials")
+        creds = json.loads(raw_creds) if raw_creds != "" else {}
+
+        return creds.get(url)
+
+    def ask_inventree_credentials(self, url):
+        """
+        Ask for (and store) the login for this InvenTree server.
+        Returns None, and stores nothing, if the user cancels.
+        """
+        user, ok = QInputDialog.getText(None, "InvenTree login", f"Username for {url}\n(leave empty to use a token only)")
+        if not ok:
+            return None
+        password, ok = QInputDialog.getText(None, "InvenTree login", f"Password for {url}", QLineEdit.EchoMode.Password)
+        if not ok:
+            return None
+        token, ok = QInputDialog.getText(None, "InvenTree login", f"API token for {url}\n(optional, used instead of the password)")
+        if not ok:
+            return None
+
+        creds = {"user": user or None, "password": password or None, "token": token or None}
 
         param = App.ParamGet("User parameter:BaseApp/Preferences/Plume")
-        if param.IsEmpty():
-            param.SetString("InvenTree Credentials", "")
-
         raw_creds = param.GetString("InvenTree Credentials")
-        if raw_creds != "":
-            creds = json.loads(raw_creds)
-        else:
-            creds = {}
+        all_creds = json.loads(raw_creds) if raw_creds != "" else {}
+        all_creds[url] = creds
+        param.SetString("InvenTree Credentials", json.dumps(all_creds))
 
-        if url not in creds:
-            user, ok = QInputDialog.getText(None, "Inventree user", f"User for {url}")
-            password, ok = QInputDialog.getText(None, "Inventree password", f"password for {url}")
-            token, ok = QInputDialog.getText(None, "Inventree token", f"token for {url}")
+        return creds
 
-            creds[url] = {"user": user if user != "" else None, "password": password if password != "" else None, "token": token if token != "" else None}
+    def inventree(self, ask_credentials=True):
+        """
+        Connect to the InvenTree server of the current repository.
 
-            param.SetString("InvenTree Credentials", json.dumps(creds))
+        Raises InventreeSetupError, with an explanation of what is missing or
+        wrong, if it is not possible. The login is asked for if there is none
+        stored yet, unless ask_credentials is False.
+        """
+        url = (self.config().get('inventree_url') or '').strip()
+        if not url:
+            raise InventreeSetupError(diagnose_inventree(url))
 
+        creds = self.stored_inventree_credentials(url)
+        if creds is None and ask_credentials:
+            creds = self.ask_inventree_credentials(url)
+        creds = creds or {}
 
-        user = creds[url]['user']
-        password = creds[url]['password']
-        token = creds[url]['token']
+        user, password, token = creds.get('user'), creds.get('password'), creds.get('token')
 
-        pi = PlumeInventree(repo_config['inventree_url'], token=token, username=user, password=password)
-        return pi
+        if not token and not (user and password):
+            # explains whether the server is fine and only the login is missing, or worse
+            raise InventreeSetupError(diagnose_inventree(url))
+
+        try:
+            return PlumeInventree(url, token=token, username=user, password=password)
+        except Exception as e:
+            diagnosis = diagnose_inventree(url, username=user, password=password, token=token)
+            if diagnosis.ok:
+                raise  # nothing found: keep the original error
+            raise InventreeSetupError(diagnosis) from e
 
     def config(self):
         param = App.ParamGet("User parameter:BaseApp/Preferences/Plume")

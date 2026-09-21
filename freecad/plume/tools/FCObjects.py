@@ -46,6 +46,7 @@ class InitializePlumeObjectCommand(CommonCommand):
 
         return False
 
+    @catch_svn
     def Activated(self):
         sel = Gui.Selection.getSelection()
         obj = sel[0]
@@ -457,6 +458,7 @@ class PublishPartCommand(CommonCommand):
 
         return True
 
+    @catch_svn
     def Activated(self):
         svn = self.svn()
         repo_config = self.config()
