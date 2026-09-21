@@ -11,6 +11,7 @@ from freecad.plume.utils.widgets import ManageSubversionWorkingCopiesDialog, Rep
 from freecad.plume.tools.Common import CommonCommand, catch_svn, refresh_panel
 
 from freecad.plume.utils.plume_svn import PlumeSvn, PlumeSvnException
+from freecad.plume.utils import user_config
 
 class SubversionManageWorkingCopiesCommand:
     def GetResources(self):
@@ -165,7 +166,7 @@ class SubversionLockCommand(CommonCommand):
             if not svn.is_in_repository(p):
                 return False
 
-            if not svn.is_trunk_path(p):
+            if user_config.lock_requires_trunk() and not svn.is_trunk_path(p):
                 return False
 
             if not svn.is_path_clean(p):
@@ -217,7 +218,7 @@ class SubversionUnlockCommand(CommonCommand):
             if not svn.is_in_repository(p):
                 return False
 
-            if not svn.is_trunk_path(p):
+            if user_config.lock_requires_trunk() and not svn.is_trunk_path(p):
                 return False
 
             if not svn.is_path_clean(p):

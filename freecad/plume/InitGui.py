@@ -179,6 +179,9 @@ class Plume(Gui.Workbench):
         from freecad.plume.pl_tools import UIPATH, ICONPATH, TRANSLATIONSPATH, translate
         from freecad.plume.tools import Repository, FCObjects, Project
         from freecad.plume.utils.selector import SelectionObserver
+        from freecad.plume.utils import user_config
+
+        user_config.ensure_exists()
 
         Gui.addIconPath(ICONPATH)
         Gui.addPreferencePage(os.path.join(UIPATH, "preferences.ui"),"Plume")
