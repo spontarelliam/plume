@@ -3,7 +3,7 @@ import html
 import traceback
 from PySide import QtWidgets, QtCore
 
-from PySide.QtCore import QModelIndex, QTimer, Qt, Signal
+from PySide.QtCore import QModelIndex, QTimer, Qt, Signal, QItemSelection, QItemSelectionModel
 from PySide.QtWidgets import QDialog, QGridLayout, QComboBox, QListWidget, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QListWidgetItem, QCheckBox, QTextEdit, QLabel,  QWidget, QTreeView, QListView, QVBoxLayout, QHBoxLayout, QCompleter, QTabWidget, QMessageBox
 from PySide.QtGui import QBrush, QColorConstants, QColor, QIcon
 
@@ -408,8 +408,15 @@ class InitializePlumeObjectDialog(QDialog):
 
 
 class DeselectableTreeView(QTreeView):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # Ctrl+click toggles an item, Shift+click selects a range
+        self.setSelectionMode(QTreeView.SelectionMode.ExtendedSelection)
+
     def mousePressEvent(self, event):
-        self.clearSelection()
+        multi = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
+        if not (event.modifiers() & multi):
+            self.clearSelection()
         QTreeView.mousePressEvent(self, event)
 
 class MainWidget(QWidget, CommonCommand):
@@ -598,12 +605,20 @@ class MainWidget(QWidget, CommonCommand):
     def onSVNTreeSelectionChanged(self, selected, deselected):
         selector = PlumeSelection.instance()
 
-        indexes = selected.indexes()
-        if len(indexes) == 0:
-            selector.resetTreeSelection()
+        paths = self.selectedPaths()
+        if paths:
+            selector.setTreeSelection(paths)
         else:
-            path = self.svn_model.filePath(indexes[0])
-            selector.setTreeSelection([path])
+            selector.resetTreeSelection()
+
+    def selectedPaths(self):
+        """Paths of all the selected items (an item spans several columns: counted once)"""
+        paths = []
+        for index in self.svn_tree.selectionModel().selectedIndexes():
+            path = self.svn_model.filePath(index)
+            if path not in paths:
+                paths.append(path)
+        return paths
 
     def onRepositoryChanged(self):
         self._refresh_timer.start()
@@ -615,17 +630,25 @@ class MainWidget(QWidget, CommonCommand):
 
         root = QModelIndex()
         expanded = treestate.collect_expanded(self.svn_tree, self.svn_model, root)
-        selected_indexes = self.svn_tree.selectionModel().selectedIndexes()
-        selected = self.svn_model.filePath(selected_indexes[0]) if selected_indexes else None
+        selected = self.selectedPaths()
 
         self.svn_model.refresh()
 
         treestate.restore_expanded(self.svn_tree, self.svn_model, root, expanded)
 
-        index = treestate.find_index(self.svn_model, root, selected) if selected else None
-        if index is not None:
+        indexes = [treestate.find_index(self.svn_model, root, p) for p in selected]
+        indexes = [i for i in indexes if i is not None]
+        if indexes:
             # selectionChanged updates PlumeSelection and the state of the commands
-            self.svn_tree.setCurrentIndex(index)
+            selection = QItemSelection()
+            for index in indexes:
+                selection.select(index, index)
+            selection_model = self.svn_tree.selectionModel()
+            selection_model.select(
+                selection,
+                QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows,
+            )
+            selection_model.setCurrentIndex(indexes[0], QItemSelectionModel.SelectionFlag.NoUpdate)
         else:
             PlumeSelection.instance().resetTreeSelection()
 
