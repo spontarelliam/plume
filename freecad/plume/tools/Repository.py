@@ -106,27 +106,32 @@ class SubversionCommitFileCommand(CommonCommand):
         if svn is None:
             return False
 
+        if len(paths) == 0:
+            return True
+
+        # a selection can hold files with nothing to commit (the unchanged parts of an assembly)
         for p in paths:
             if not svn.is_in_repository(p):
-                return False
+                continue
 
             if svn.is_path_clean(p) and not svn.is_path_unversioned(p):
-                return False
+                continue
 
             if svn.is_path_switched(svn.get_rel_path(p)):
-                return False
+                continue
 
-        return True
+            return True
+
+        return False
 
     @refresh_panel
     @catch_svn
     def Activated(self):
         svn = self.svn()
-        paths = [(svn.path_status(path).type_raw_name, path) for path in self.get_files_from_objects()]
-        if len(paths) == 0:
-            paths = [(s.type_raw_name, s.path) for s in svn.status() if not s.switched]
+        paths = [(s.type_raw_name, s.path) for s in svn.status() if not s.switched]
+        selected = self.get_files_from_objects()
 
-        ok, paths_to_commit, message = CommitDialog.get_commit_infos(paths=paths)
+        ok, paths_to_commit, message = CommitDialog.get_commit_infos(paths=paths, checked_paths=selected)
 
         if ok:
             for path in paths_to_commit:

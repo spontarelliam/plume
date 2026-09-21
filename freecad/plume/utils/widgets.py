@@ -214,9 +214,9 @@ class CommitListWidget(QListWidget):
         "unversioned": QColor("#808080"),
     }
 
-    def addFile(self, path, status):
+    def addFile(self, path, status, checked=False):
         item = QListWidgetItem(path)
-        item.setCheckState(QtCore.Qt.Unchecked)
+        item.setCheckState(QtCore.Qt.Checked if checked else QtCore.Qt.Unchecked)
         if status in self.COLOR_MAP:
             item.setForeground(QBrush(self.COLOR_MAP[status]))
         self.addItem(item)
@@ -226,7 +226,7 @@ class CommitListWidget(QListWidget):
 
 
 class CommitDialog(QDialog):
-    def __init__(self, paths, *args, **kwargs):
+    def __init__(self, paths, *args, checked_paths=(), **kwargs):
         super().__init__(*args, **kwargs)
 
         self.setWindowTitle('SVN Commit')
@@ -235,8 +235,11 @@ class CommitDialog(QDialog):
         self.setLayout(layout)
 
         self.list_widget = CommitListWidget(self)
+        # the files checked at the start (eg. selected in the Working Copy view) come first
+        checked = {os.path.normpath(p) for p in checked_paths}
+        paths = sorted(paths, key=lambda sp: os.path.normpath(sp[1]) not in checked)
         for s, p in paths:
-            self.list_widget.addFile(p, s)
+            self.list_widget.addFile(p, s, checked=os.path.normpath(p) in checked)
 
         layout.addWidget(QLabel('Files to commit', self), 0, 0)
         layout.addWidget(self.list_widget, 1, 0)
@@ -262,8 +265,8 @@ class CommitDialog(QDialog):
         super().accept()
 
     @staticmethod
-    def get_commit_infos(paths):
-        dialog = CommitDialog(paths)
+    def get_commit_infos(paths, checked_paths=()):
+        dialog = CommitDialog(paths, checked_paths=checked_paths)
         retcode = dialog.exec_()
 
         paths_to_commit = dialog.list_widget.getSelectedPaths()
