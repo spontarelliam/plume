@@ -15,7 +15,7 @@ from freecad.plume.utils.svnstatusmodel import SvnStatusModel, SvnStatusItem
 from freecad.plume.utils.inventreemodel import InventreeModel
 from freecad.plume.utils.inventree_check import Diagnosis, InventreeSetupError
 from freecad.plume.utils.selector import PlumeSelection, RepositoryEvents
-from freecad.plume.utils import treestate, fcdeps
+from freecad.plume.utils import treestate, fcdeps, user_config
 
 from freecad.plume.utils.plume_svn import PlumeSvn
 from freecad.plume.utils.fc_utils import read_repo_config, write_repo_config
@@ -446,6 +446,10 @@ class MainWidget(QWidget, CommonCommand):
         self.svn_model.modelReset.connect(self.fitFilenameColumn)
         self.svn_tree.expanded.connect(self.fitFilenameColumn)
         self.svn_tree.collapsed.connect(self.fitFilenameColumn)
+        # the Switched/External columns show or not, per the user settings; re-read on every refresh
+        # so an edit to the settings file is picked up without restarting FreeCAD
+        self.svn_model.modelReset.connect(self.applyColumnVisibility)
+        self.applyColumnVisibility()
         self._keep_selection = False  # True while the selection is set by the code, not by the user
 
         # reload the status when a command (lock, commit...) changes the working copy
@@ -641,6 +645,14 @@ class MainWidget(QWidget, CommonCommand):
             selector.setTreeSelection(paths)
         else:
             selector.resetTreeSelection()
+
+    def applyColumnVisibility(self, *args):
+        """Show or hide the Switched/External columns, per the user settings"""
+        for name, shown in (
+            ("switched", user_config.show_switched_column()),
+            ("external", user_config.show_external_column()),
+        ):
+            self.svn_tree.setColumnHidden(SvnStatusItem.COLUMNS.index(name), not shown)
 
     MAX_FILENAME_CHARS = 30
 

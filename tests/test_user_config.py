@@ -50,6 +50,10 @@ class TestUserConfig(unittest.TestCase):
         self.assertTrue(self.requires_trunk())
         self.assertEqual(len(self.messages), 1)
 
+    def test_switched_and_external_columns_hidden_by_default(self):
+        self.assertFalse(self.config.getboolean("working_copy", "show_switched_column"))
+        self.assertFalse(self.config.getboolean("working_copy", "show_external_column"))
+
     def test_template_matches_defaults(self):
         parser = user_config.configparser.ConfigParser(inline_comment_prefixes=("#", ";"))
         parser.read_string(user_config.TEMPLATE)

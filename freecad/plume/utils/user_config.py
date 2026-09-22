@@ -22,10 +22,18 @@ TEMPLATE = """\
 # true : "Lock files" and "Unlock files" only work on files under a "trunk" folder.
 # false: any file of the working copy can be locked, whatever the folder structure.
 requires_trunk = true
+
+[working_copy]
+# Show the "Switched" column in the Working Copy view.
+show_switched_column = false
+# Show the "External" column in the Working Copy view.
+show_external_column = false
 """
 
 DEFAULTS = {
     ("locking", "requires_trunk"): True,
+    ("working_copy", "show_switched_column"): False,
+    ("working_copy", "show_external_column"): False,
 }
 
 
@@ -141,3 +149,13 @@ def ensure_exists():
 def lock_requires_trunk():
     """Lock/Unlock only for files under a 'trunk' folder?"""
     return _config.getboolean("locking", "requires_trunk")
+
+
+def show_switched_column():
+    """Show the 'Switched' column in the Working Copy view?"""
+    return _config.getboolean("working_copy", "show_switched_column")
+
+
+def show_external_column():
+    """Show the 'External' column in the Working Copy view?"""
+    return _config.getboolean("working_copy", "show_external_column")
