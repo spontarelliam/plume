@@ -169,12 +169,13 @@ class PlumeSvn(object):
 
     CLEAN_STATUSES = ("normal", "unversioned", "external", "ignored")
 
-    def has_uncommitted_changes(self):
+    def has_uncommitted_changes(self, path=""):
         """
-        True if any tracked file of the working copy differs from its last SVN commit
-        (unversioned, external and ignored files don't count).
+        True if the given file (or, by default, any tracked file of the whole working
+        copy) differs from its last SVN commit (unversioned, external and ignored files
+        don't count).
         """
-        return any(s.type_raw_name not in self.CLEAN_STATUSES for s in self.status())
+        return any(s.type_raw_name not in self.CLEAN_STATUSES for s in self.status(path))
 
     def get_url(self, path):
         """

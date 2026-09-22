@@ -251,29 +251,33 @@ class SubversionUnlockCommand(CommonCommand):
 
 class SubversionModifiedIndicatorCommand(CommonCommand):
     """
-    Not a real command: an indicator, lit up when a tracked file of the current working
-    copy differs from its last SVN commit (greyed out, as any inactive command, otherwise).
+    Not a real command: an indicator, lit up when the active document differs from its
+    last SVN commit (greyed out, as any inactive command, otherwise).
     """
     def GetResources(self):
         return {
             "Pixmap": os.path.join(ICONPATH, "commit.svg"),
-            "MenuText": translate("Plume", "Working copy has changes to commit"),
+            "MenuText": translate("Plume", "Active document has uncommitted changes"),
             "ToolTip": translate(
                 "Plume",
-                "<html><head/><body><p><b>Working copy has changes to commit</b> \
+                "<html><head/><body><p><b>Active document has uncommitted changes</b> \
                     <br><br> \
-                    lit up when a tracked file differs from its last SVN commit \
+                    lit up when the active document differs from its last SVN commit \
                     </p></body></html>",
             ),
         }
 
     def IsActive(self):
+        doc = App.ActiveDocument
+        if doc is None or not doc.FileName:
+            return False
+
         svn = self.svn()
         if svn is None:
             return False
 
         try:
-            return svn.has_uncommitted_changes()
+            return svn.is_in_repository(doc.FileName) and svn.has_uncommitted_changes(doc.FileName)
         except (PlumeSvnException, SvnException, OSError):
             # a frequently re-evaluated indicator shouldn't pop up an error dialog (no @catch_svn)
             return False
