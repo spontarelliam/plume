@@ -437,8 +437,8 @@ class MainWidget(QWidget, CommonCommand):
         self.svn_tree.setModel(self.svn_model)
         self.svn_tree.selectionModel().selectionChanged.connect(self.onSVNTreeSelectionChanged)
         self.svn_tree.doubleClicked.connect(self.onSVNTreeItemDoubleClicked)
-        # the revision columns are only as wide as their title (and their numbers, if wider)
-        for name in ("revision", "last_committed_revision"):
+        # these columns are only as wide as their title (and their content, if wider)
+        for name in ("revision", "last_committed_revision", "locked"):
             self.svn_tree.header().setSectionResizeMode(
                 SvnStatusItem.COLUMNS.index(name), QHeaderView.ResizeMode.ResizeToContents
             )
