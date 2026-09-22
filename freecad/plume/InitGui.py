@@ -216,7 +216,7 @@ class Plume(Gui.Workbench):
         code which should be computed when a user switch to this workbench
         """
         from PySide6.QtGui import QIcon
-        from PySide6.QtWidgets import QMdiArea
+        from PySide6.QtWidgets import QDockWidget
         from freecad.plume.utils.widgets import MainWidget
 
         self.create_or_show_window(MainWidget)
@@ -243,37 +243,48 @@ class Plume(Gui.Workbench):
 
     
     def create_or_show_window(self, widget_cls):
-        """Create the diff panel if it doesn't exist, or show/focus it if it does."""
-        # Create subwindow if it doesn't exist (was closed or never created)
+        """Create the panel if it doesn't exist, or show/focus it if it does."""
+        # Create the dock widget if it doesn't exist (was closed or never created)
         if self._subwin is None:
             self._create_window(widget_cls)
         else:
-            # Show existing subwindow and bring to front
+            # Show the existing dock widget and bring its tab to the front
             self._subwin.show()
-            # self._subwin.raise_()
-            # self._subwin.setFocus()
-        
+            self._subwin.raise_()
+
     def _create_window(self, widget_cls):
         from PySide6.QtCore import Qt
-        from PySide6.QtWidgets import QMdiArea
+        from PySide6.QtWidgets import QDockWidget, QToolBar
         from PySide.QtGui import QIcon
         from freecad.plume.pl_tools import UIPATH, ICONPATH, TRANSLATIONSPATH, translate
 
         main = Gui.getMainWindow()
-        mdi = main.findChild(QMdiArea)
-    
+
         w = widget_cls()
-    
-        self._subwin = mdi.addSubWindow(w)
-        self._subwin.setWindowTitle("Plume")
+
+        # a docked panel isn't destroyed when its close button is clicked, only hidden
+        # (as the Report view or Python console): this one is created once per session
+        self._subwin = QDockWidget("Plume", main)
+        self._subwin.setObjectName("Plume")
         self._subwin.setWindowIcon(QIcon(os.path.join(ICONPATH, "plume.png")))
-        self._subwin.resize(900, 600)
-        self._subwin.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        self._subwin.setWidget(w)
+
+        # show it in the lower pane, alongside the Report view and Python console
+        main.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._subwin)
+        report_view = main.findChild(QDockWidget, "Report view")
+        if report_view is not None:
+            main.tabifyDockWidget(report_view, self._subwin)
+
         self._subwin.show()
-        
-        self._subwin.destroyed.connect(self._on_subwindow_closed)
-        
-    def _on_subwindow_closed(self):
-        self._subwin = None  # Reset reference so new one will be created on next activation
+        self._subwin.raise_()
+
+        # the working copy picker and refresh button go on the Repository toolbar,
+        # ahead of its command icons, instead of taking up room in the panel itself
+        toolbar = main.findChild(QToolBar, "Repository")
+        if toolbar is not None:
+            before = toolbar.actions()[0] if toolbar.actions() else None
+            toolbar.insertWidget(before, w.workingcopies_combobox)
+            toolbar.insertWidget(before, w.refreshButton)
+            toolbar.insertSeparator(before)
 
 Gui.addWorkbench(Plume())

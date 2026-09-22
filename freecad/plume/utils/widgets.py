@@ -1,10 +1,8 @@
 import os
-import html
-import traceback
 from PySide import QtWidgets, QtCore
 
 from PySide.QtCore import QModelIndex, QTimer, Qt, Signal, QItemSelection, QItemSelectionModel
-from PySide.QtWidgets import QDialog, QGridLayout, QComboBox, QListWidget, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QListWidgetItem, QCheckBox, QTextEdit, QLabel,  QWidget, QTreeView, QListView, QVBoxLayout, QHBoxLayout, QCompleter, QTabWidget, QMessageBox, QApplication, QHeaderView
+from PySide.QtWidgets import QDialog, QGridLayout, QComboBox, QListWidget, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QListWidgetItem, QCheckBox, QTextEdit, QLabel,  QWidget, QTreeView, QListView, QVBoxLayout, QCompleter, QApplication, QHeaderView
 from PySide.QtGui import QBrush, QColorConstants, QColor, QIcon
 
 import FreeCAD as App
@@ -12,8 +10,6 @@ import FreeCADGui as Gui
 
 from freecad.plume.pl_tools import UIPATH, ICONPATH, TRANSLATIONSPATH, translate
 from freecad.plume.utils.svnstatusmodel import SvnStatusModel, SvnStatusItem
-from freecad.plume.utils.inventreemodel import InventreeModel
-from freecad.plume.utils.inventree_check import Diagnosis, InventreeSetupError
 from freecad.plume.utils.selector import PlumeSelection, RepositoryEvents
 from freecad.plume.utils import treestate, fcdeps, user_config
 
@@ -426,10 +422,6 @@ class MainWidget(QWidget, CommonCommand):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        # InvenTree is only loaded when its tab is shown: reading it from the server takes time
-        self.toolbox = None
-        self._inventree_stale = True
-
         # SVN
         self.svn_model = SvnStatusModel()
 
@@ -459,47 +451,11 @@ class MainWidget(QWidget, CommonCommand):
         self._refresh_timer.timeout.connect(self.refreshStatus)
         RepositoryEvents.instance().changed.connect(self.onRepositoryChanged)
 
-
-        # INVENTREE
-        self.inventree_model = InventreeModel()
-        self.inventree_tree = QTreeView()
-        self.inventree_tree.setModel(self.inventree_model)
-
-        # explains what is missing or wrong when InvenTree is not set up (yet)
-        self.inventree_status_label = QLabel()
-        self.inventree_status_label.setWordWrap(True)
-        self.inventree_status_label.setTextFormat(Qt.TextFormat.RichText)
-
-        prefs_button = QPushButton("Repository preferences...")
-        prefs_button.clicked.connect(self.onInventreePreferences)
-        credentials_button = QPushButton("Set credentials...")
-        credentials_button.clicked.connect(self.onInventreeCredentials)
-        retry_button = QPushButton("Retry")
-        retry_button.clicked.connect(self.updateInventree)
-
-        banner_buttons = QHBoxLayout()
-        banner_buttons.addWidget(prefs_button)
-        banner_buttons.addWidget(credentials_button)
-        banner_buttons.addWidget(retry_button)
-        banner_buttons.addStretch()
-
-        self.inventree_banner = QWidget()
-        banner_layout = QVBoxLayout(self.inventree_banner)
-        banner_layout.addWidget(self.inventree_status_label)
-        banner_layout.addLayout(banner_buttons)
-        self.inventree_banner.hide()
-
-        self.inventree_tab = QWidget()
-        inventree_layout = QVBoxLayout(self.inventree_tab)
-        inventree_layout.addWidget(self.inventree_banner)
-        inventree_layout.addWidget(self.inventree_tree)
-
-
-        # MENU
+        # the working copy picker and refresh button live in the top toolbar (see InitGui.py),
+        # not in this panel: built here since they drive this panel's own state/methods
         self.refreshButton = QPushButton('Refresh')
         self.refreshButton.clicked.connect(self.refresh)
-        
-        # initialize
+
         self.workingcopies_combobox = QComboBox()
         self.refreshWorkingCopies()
         param = App.ParamGet("User parameter:BaseApp/Preferences/Plume")
@@ -512,22 +468,9 @@ class MainWidget(QWidget, CommonCommand):
                     self.workingcopies_combobox.setCurrentIndex(index)
                     self.setRootDir(curr_wc)
 
-        menu_layout = QHBoxLayout()
-        menu_layout.addWidget(self.workingcopies_combobox)
-        menu_layout.addWidget(self.refreshButton)
-        menu_widget = QWidget()
-        menu_widget.setLayout(menu_layout)
-
-
         # MAIN Layout
-        self.toolbox = QTabWidget()
-        self.toolbox.addTab(self.svn_tree, "Working Copy")
-        self.toolbox.addTab(self.inventree_tab, "Inventree")
-        self.toolbox.currentChanged.connect(self.onTabChanged)
-
         l = QVBoxLayout()
-        l.addWidget(menu_widget)
-        l.addWidget(self.toolbox)
+        l.addWidget(self.svn_tree)
 
         self.setLayout(l)
 
@@ -553,85 +496,6 @@ class MainWidget(QWidget, CommonCommand):
 
         self.svn_model.load(path)
         PlumeSelection.instance().resetTreeSelection()
-
-        self.updateInventree()
-
-    def showInventreeProblem(self, diagnosis):
-        text = f"<b>{html.escape(diagnosis.summary)}</b>"
-        if diagnosis.details:
-            text += "<br>" + html.escape(diagnosis.details).replace("\n", "<br>")
-        self.inventree_status_label.setText(text)
-        self.inventree_banner.show()
-
-    def onTabChanged(self, index):
-        if self._inventree_stale and self.toolbox.widget(index) is self.inventree_tab:
-            self.updateInventree()
-
-    def updateInventree(self):
-        """
-        Load the InvenTree parts tree. If InvenTree is not (correctly) set up
-        for this repository, say what is missing instead.
-
-        Nothing is loaded while the InvenTree tab is not shown: it is done when the tab is shown.
-        """
-        # start empty, so nothing stale is kept from another working copy
-        self.inventree_model = InventreeModel()
-        self.inventree_tree.setModel(self.inventree_model)
-
-        self._inventree_stale = self.toolbox is None or self.toolbox.currentWidget() is not self.inventree_tab
-        if self._inventree_stale:
-            return
-
-        if not App.ParamGet("User parameter:BaseApp/Preferences/Plume").GetString("CurrentWorkingCopy"):
-            self.showInventreeProblem(Diagnosis("no_working_copy", "No working copy selected."))
-            return
-
-        try:
-            self.inventree_model.load(self.inventree(ask_credentials=False))
-        except InventreeSetupError as e:
-            self.showInventreeProblem(e.diagnosis)
-        except Exception as e:
-            App.Console.PrintError(traceback.format_exc())
-            self.showInventreeProblem(
-                Diagnosis("error", "Could not read the parts from InvenTree.", f"{type(e).__name__}: {e}")
-            )
-        else:
-            self.inventree_banner.hide()
-
-    def currentWorkingCopyOrWarn(self):
-        """Path of the current working copy. Tells the user, and returns None, if there is none."""
-        wc = App.ParamGet("User parameter:BaseApp/Preferences/Plume").GetString("CurrentWorkingCopy")
-        if not wc:
-            QMessageBox.information(
-                self,
-                "No working copy selected",
-                "InvenTree is set up per repository: select a working copy in the list first.",
-            )
-        return wc or None
-
-    def onInventreePreferences(self):
-        wc = self.currentWorkingCopyOrWarn()
-        if wc:
-            RepositoryPreferencesDialog(wc).exec()
-            self.updateInventree()
-
-    def onInventreeCredentials(self):
-        if not self.currentWorkingCopyOrWarn():
-            return
-
-        url = (self.config().get('inventree_url') or '').strip()
-        if not url:
-            # credentials are stored per server: the server address comes first
-            answer = QMessageBox.question(
-                self,
-                "InvenTree server needed",
-                "The login is stored per InvenTree server, and no server address is set for this repository yet.\n\n"
-                "Open the repository preferences to enter it now?",
-            )
-            if answer == QMessageBox.StandardButton.Yes:
-                self.onInventreePreferences()
-        elif self.ask_inventree_credentials(url) is not None:
-            self.updateInventree()
 
 
     def onSVNTreeSelectionChanged(self, selected, deselected):
