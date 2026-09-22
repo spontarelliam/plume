@@ -167,6 +167,15 @@ class PlumeSvn(object):
 
         return list(self.local_repo.status(rel_path, verbose=verbose))
 
+    CLEAN_STATUSES = ("normal", "unversioned", "external", "ignored")
+
+    def has_uncommitted_changes(self):
+        """
+        True if any tracked file of the working copy differs from its last SVN commit
+        (unversioned, external and ignored files don't count).
+        """
+        return any(s.type_raw_name not in self.CLEAN_STATUSES for s in self.status())
+
     def get_url(self, path):
         """
         Returns the URL from an absolute or relative path 

@@ -163,6 +163,11 @@ class Plume(Gui.Workbench):
         # "Plume_LinkObjectToItem"
     ]
 
+    # not a real command: an indicator lit up when the working copy has changes to commit
+    toolbox_status = [
+        "Plume_ModifiedIndicator",
+    ]
+
     def __init__(self):
         super().__init__()
         self._subwin = None  # Store reference to MDI subwindow
@@ -178,7 +183,7 @@ class Plume(Gui.Workbench):
         """
         from freecad.plume.pl_tools import UIPATH, ICONPATH, TRANSLATIONSPATH, translate
         from freecad.plume.tools import Repository, FCObjects, Project
-        from freecad.plume.utils.selector import SelectionObserver
+        from freecad.plume.utils.selector import SelectionObserver, DocumentSaveObserver
         from freecad.plume.utils import user_config
 
         user_config.ensure_exists()
@@ -193,6 +198,7 @@ class Plume(Gui.Workbench):
         self.appendToolbar(translate("plume", "Repository"), self.toolbox_repository)
         self.appendToolbar(translate("plume", "Project"), self.toolbox_project)
         self.appendToolbar(translate("plume", "Object"), self.toolbox_object)
+        self.appendToolbar(translate("plume", "Status"), self.toolbox_status)
 
         self.appendMenu(translate("plume", "Repository"), self.toolbox_repository)
         self.appendMenu(translate("plume", "Project"), self.toolbox_project)
@@ -200,6 +206,9 @@ class Plume(Gui.Workbench):
 
         s=SelectionObserver()
         Gui.Selection.addObserver(s)
+
+        # refreshes the "changes to commit" indicator when a document is saved
+        App.addDocumentObserver(DocumentSaveObserver())
 
 
     def Activated(self):

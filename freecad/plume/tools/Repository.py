@@ -11,6 +11,7 @@ from freecad.plume.utils.widgets import ManageSubversionWorkingCopiesDialog, Rep
 from freecad.plume.tools.Common import CommonCommand, catch_svn, refresh_panel
 
 from freecad.plume.utils.plume_svn import PlumeSvn, PlumeSvnException
+from freecad.plume.svn.exception import SvnException
 from freecad.plume.utils import user_config
 
 class SubversionManageWorkingCopiesCommand:
@@ -248,9 +249,43 @@ class SubversionUnlockCommand(CommonCommand):
 
 
 
+class SubversionModifiedIndicatorCommand(CommonCommand):
+    """
+    Not a real command: an indicator, lit up when a tracked file of the current working
+    copy differs from its last SVN commit (greyed out, as any inactive command, otherwise).
+    """
+    def GetResources(self):
+        return {
+            "Pixmap": os.path.join(ICONPATH, "commit.svg"),
+            "MenuText": translate("Plume", "Working copy has changes to commit"),
+            "ToolTip": translate(
+                "Plume",
+                "<html><head/><body><p><b>Working copy has changes to commit</b> \
+                    <br><br> \
+                    lit up when a tracked file differs from its last SVN commit \
+                    </p></body></html>",
+            ),
+        }
+
+    def IsActive(self):
+        svn = self.svn()
+        if svn is None:
+            return False
+
+        try:
+            return svn.has_uncommitted_changes()
+        except (PlumeSvnException, SvnException, OSError):
+            # a frequently re-evaluated indicator shouldn't pop up an error dialog (no @catch_svn)
+            return False
+
+    def Activated(self):
+        pass
+
+
 Gui.addCommand("Plume_ManageWorkingCopies", SubversionManageWorkingCopiesCommand())
 Gui.addCommand("Plume_RepositoryPreferences", RepositoryPreferencesCommand())
 Gui.addCommand("Plume_Update", SubversionUpdateCommand())
 Gui.addCommand("Plume_Commit", SubversionCommitFileCommand())
 Gui.addCommand("Plume_Lock", SubversionLockCommand())
 Gui.addCommand("Plume_Unlock", SubversionUnlockCommand())
+Gui.addCommand("Plume_ModifiedIndicator", SubversionModifiedIndicatorCommand())

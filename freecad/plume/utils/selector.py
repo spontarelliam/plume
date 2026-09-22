@@ -46,6 +46,15 @@ class RepositoryEvents(QObject):
         return cls._instance
 
 
+class DocumentSaveObserver:
+    """
+    A document was saved: a tracked file may now differ from its last SVN commit.
+    Refresh the state of the Plume commands (the "changes to commit" indicator...).
+    """
+    def slotFinishSaveDocument(self, doc, filepath):
+        Gui.Command.update()
+
+
 class SelectionObserver:
     def addSelection(self, document, object, element, position):
         param = App.ParamGet("User parameter:BaseApp/Preferences/Plume")
