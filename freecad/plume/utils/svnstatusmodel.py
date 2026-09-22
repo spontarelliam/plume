@@ -35,6 +35,7 @@ class SvnStatusItem:
         "last_committed_revision",
         "last_committed_author",
         "locked",
+        "lock_owner",
         "switched",
         "external"
     ]
@@ -131,6 +132,7 @@ class SvnStatusModel(QAbstractItemModel):
             switched="Switched",
             external="External",
             locked="Locked",
+            lock_owner="Locked by",
         )
 
 

@@ -18,6 +18,7 @@ _STATUS_ENTRY = \
             'last_committed_author',
             'switched',
             'locked',
+            'lock_owner',
             'external',
             'is_folder'
         ], defaults=[
@@ -30,6 +31,7 @@ _STATUS_ENTRY = \
             None,
             False,
             False,
+            None,
             False,
             False
         ])
@@ -164,7 +166,9 @@ class LocalClient(svn.common.CommonClient):
             EXTERNAL_LUT = {"true":True, "false":False, None:False}
             external = EXTERNAL_LUT[wcstatus_attr.get('file-external')]
 
-            lock_status = wcstatus.find('lock') is not None
+            lock = wcstatus.find('lock')
+            lock_status = lock is not None
+            lock_owner = lock.findtext('owner') if lock is not None else None
 
             yield _STATUS_ENTRY(
                 filename=os.path.split(name)[1],
@@ -176,6 +180,7 @@ class LocalClient(svn.common.CommonClient):
                 last_committed_author=last_committed_author,
                 switched=switched,
                 locked=lock_status,
+                lock_owner=lock_owner,
                 external=external,
                 is_folder=os.path.isdir(name)
             )
