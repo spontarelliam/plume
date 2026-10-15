@@ -2,7 +2,7 @@ import os
 from PySide import QtWidgets, QtCore
 
 from PySide.QtCore import QModelIndex, QTimer, Qt, Signal, QItemSelection, QItemSelectionModel
-from PySide.QtWidgets import QDialog, QGridLayout, QComboBox, QListWidget, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QListWidgetItem, QCheckBox, QTextEdit, QLabel,  QWidget, QTreeView, QListView, QVBoxLayout, QCompleter, QApplication, QHeaderView
+from PySide.QtWidgets import QDialog, QGridLayout, QComboBox, QListWidget, QLineEdit, QPushButton, QFileDialog, QDialogButtonBox, QListWidgetItem, QCheckBox, QTextEdit, QLabel,  QWidget, QTreeView, QListView, QVBoxLayout, QCompleter, QApplication, QHeaderView, QAbstractItemView
 from PySide.QtGui import QBrush, QColorConstants, QColor, QIcon
 
 import FreeCAD as App
@@ -552,12 +552,16 @@ class MainWidget(QWidget, CommonCommand):
 
         paths = self.selectedPaths()
         if len(paths) != 1 or not paths[0].lower().endswith(".fcstd"):
+            self.svn_model.setEmphasizedPath(None)
             return
+
+        clicked_index = self.svn_tree.selectionModel().currentIndex()
 
         root = QModelIndex()
         indexes = [treestate.find_index(self.svn_model, root, p) for p in fcdeps.dependencies(paths[0])]
         indexes = [i for i in indexes if i is not None]
         if not indexes:
+            self.svn_model.setEmphasizedPath(None)
             return
 
         selection = QItemSelection()
@@ -577,6 +581,14 @@ class MainWidget(QWidget, CommonCommand):
             )
         finally:
             self._keep_selection = False
+
+        # bold it, to tell it apart from the dependencies just selected alongside it
+        self.svn_model.setEmphasizedPath(paths[0])
+
+        # expanding folders above it can push the clicked file off-screen without Qt scrolling
+        # to compensate (expanding just adds rows): bring it back into view
+        if clicked_index.isValid():
+            self.svn_tree.scrollTo(clicked_index, QAbstractItemView.ScrollHint.EnsureVisible)
 
     def selectedPaths(self):
         """Paths of all the selected items (an item spans several columns: counted once)"""

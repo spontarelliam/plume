@@ -18,13 +18,14 @@ from PySide.QtWidgets import (
     QApplication, 
     QTreeView,
 )
-from PySide.QtGui import QColor
+from PySide.QtGui import QColor, QFont
 
 
 from PySide.QtWidgets import QFileIconProvider
 from PySide.QtCore import QFileInfo
 
 from freecad.plume.svn.local import LocalClient, _STATUS_ENTRY
+from freecad.plume.utils import treestate
 
 
 class SvnStatusItem:
@@ -121,6 +122,10 @@ class SvnStatusModel(QAbstractItemModel):
         self._wc = None
         self._client = None
 
+        # the file originally clicked, bolded to tell it apart from the dependencies
+        # auto-selected alongside it (see MainWidget.selectDependencies)
+        self._emphasized_path = None
+
     @staticmethod
     def _header_entry():
         return _STATUS_ENTRY(
@@ -208,7 +213,7 @@ class SvnStatusModel(QAbstractItemModel):
         if not index.isValid():
             return None
 
-        if role not in [Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.ForegroundRole, Qt.ItemDataRole.DecorationRole, Qt.ItemDataRole.CheckStateRole]:
+        if role not in [Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.ForegroundRole, Qt.ItemDataRole.DecorationRole, Qt.ItemDataRole.CheckStateRole, Qt.ItemDataRole.FontRole]:
             return None
 
         item: SvnStatusItem = self.get_item(index)
@@ -217,7 +222,7 @@ class SvnStatusModel(QAbstractItemModel):
             if role == Qt.ItemDataRole.CheckStateRole:
                 return Qt.CheckState.Checked if item.data(index.column()) else Qt.CheckState.Unchecked
 
-        else:        
+        else:
             if role == Qt.ItemDataRole.DisplayRole:
                 return item.data(index.column())
 
@@ -230,6 +235,27 @@ class SvnStatusModel(QAbstractItemModel):
             if role == Qt.ItemDataRole.DecorationRole:
                 if index.column() == SvnStatusItem.COLUMNS.index("filename"):
                     return self.ICON_PROVIDER.icon(QFileIconProvider.IconType.Folder) if item.isFolder() else self.ICON_PROVIDER.icon(QFileInfo(item.path()))
+
+            if role == Qt.ItemDataRole.FontRole:
+                if index.column() == SvnStatusItem.COLUMNS.index("filename") and item.path() == self._emphasized_path:
+                    font = QFont()
+                    font.setBold(True)
+                    return font
+
+    def setEmphasizedPath(self, path):
+        """
+        Mark one file's name in bold, to tell it apart from the dependencies selected
+        alongside it (pass None to clear it).
+        """
+        old, self._emphasized_path = self._emphasized_path, path
+        if old == path:
+            return
+
+        for p in (old, path):
+            if p:
+                index = treestate.find_index(self, QModelIndex(), p)
+                if index is not None:
+                    self.dataChanged.emit(index, index, [Qt.ItemDataRole.FontRole])
 
 
     def get_item(self, index: QModelIndex = QModelIndex()) -> SvnStatusItem:
