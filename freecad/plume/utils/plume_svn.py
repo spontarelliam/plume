@@ -21,6 +21,41 @@ class PlumeSvn(object):
         self.working_copy = workcopy
         self.repo_url = repo_url
 
+        # FreeCAD re-evaluates several commands' availability for the same selection
+        # (Lock, Unlock, Commit...), each checking several things (clean? switched?
+        # locked?) per path: cache the status lookup behind them, for the lifetime of
+        # this instance, instead of repeating the same `svn status` subprocess call
+        self._status_cache = {}
+        self._full_status_cache = None
+
+    def _full_status(self):
+        """
+        Status of every tracked (or not) file of the working copy, in one subprocess
+        call (the same single whole-tree call the Working Copy panel itself already
+        uses), cached for the lifetime of this instance. Checking many files (eg. all
+        the dependencies of an assembly) this way costs one `svn status`, not one per
+        file.
+        """
+        if self._full_status_cache is None:
+            self._full_status_cache = {
+                os.path.normpath(entry.path): entry for entry in self.local_repo.status(verbose=True)
+            }
+        return self._full_status_cache
+
+    def _status_entries(self, rel_path, verbose=False, depth=None):
+        # the common case (one file, the usual unlimited depth): served from the
+        # whole-tree status fetched above, no extra subprocess call needed. A clean
+        # file has no entry in the plain (non-verbose) per-path query this replaces,
+        # but an explicit "normal" entry here: every caller treats the two the same.
+        if not verbose and depth is None:
+            entry = self._full_status().get(os.path.normpath(os.path.join(self.working_copy, rel_path)))
+            return [entry] if entry is not None else []
+
+        key = (rel_path, verbose, depth)
+        if key not in self._status_cache:
+            self._status_cache[key] = list(self.local_repo.status(rel_path, verbose=verbose, depth=depth))
+        return self._status_cache[key]
+
     def update(self, paths=[], revision=None):
         """
         update repository from server
@@ -117,7 +152,7 @@ class PlumeSvn(object):
         if not os.path.isfile(os.path.join(self.working_copy, rel_path)):
             raise OSError(f"{rel_path} is not a file")
 
-        l = list(self.local_repo.status(rel_path))
+        l = self._status_entries(rel_path)
         if len(l) != 1:
             return False
         status = l[0]
@@ -130,7 +165,7 @@ class PlumeSvn(object):
         """
         rel_path = self.get_rel_path(path)
 
-        st_rep = list(self.local_repo.status(rel_path))
+        st_rep = self._status_entries(rel_path)
 
         if len(st_rep) > 0:
             for s in st_rep:
@@ -147,7 +182,7 @@ class PlumeSvn(object):
         if not os.path.exists(os.path.join(self.working_copy, rel_path)):
             raise OSError(f"{rel_path} doesn't exist")
 
-        l = list(self.local_repo.status(rel_path, depth=depth))
+        l = self._status_entries(rel_path, depth=depth)
         if len(l) == 0:
             return svn.local._STATUS_ENTRY(path=rel_path, is_folder=os.path.isdir(os.path.join(self.working_copy, rel_path)))
         if len(l) > 1:
@@ -291,7 +326,7 @@ class PlumeSvn(object):
         # if not os.path.isfile(os.path.join(self.working_copy, rel_path)):
         #     raise OSError(f"{rel_path} is not a file") # TODO : Are we sure to avoid the isfile test ???? (commented to be able to commit/add folder)
 
-        l = list(self.local_repo.status(rel_path))
+        l = self._status_entries(rel_path)
         if len(l) != 1:
             # if on a folder, zero entry means not added or clean, so path not switched
             return False 
