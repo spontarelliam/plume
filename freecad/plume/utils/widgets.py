@@ -565,12 +565,20 @@ class MainWidget(QWidget, CommonCommand):
             return
 
         selection = QItemSelection()
-        for index in indexes:
-            selection.select(index, index)
-            parent = index.parent()
-            while parent.isValid():  # show the selected files, even in a closed folder
-                self.svn_tree.expand(parent)
-                parent = parent.parent()
+        # fitFilenameColumn() re-measures every visible row (icons included, which can be
+        # slow): with many dependencies, expanding one folder at a time would run it that
+        # many times over a tree that only keeps growing. Expand them all, then refit once.
+        self.svn_tree.expanded.disconnect(self.fitFilenameColumn)
+        try:
+            for index in indexes:
+                selection.select(index, index)
+                parent = index.parent()
+                while parent.isValid():  # show the selected files, even in a closed folder
+                    self.svn_tree.expand(parent)
+                    parent = parent.parent()
+        finally:
+            self.svn_tree.expanded.connect(self.fitFilenameColumn)
+        self.fitFilenameColumn()
 
         self._keep_selection = True
         try:
