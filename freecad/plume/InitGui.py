@@ -263,17 +263,17 @@ class Plume(Gui.Workbench):
         w = widget_cls()
 
         # a docked panel isn't destroyed when its close button is clicked, only hidden
-        # (as the Report view or Python console): this one is created once per session
+        # (as the Tasks panel or Python console): this one is created once per session
         self._subwin = QDockWidget("Plume", main)
         self._subwin.setObjectName("Plume")
         self._subwin.setWindowIcon(QIcon(os.path.join(ICONPATH, "plume.png")))
         self._subwin.setWidget(w)
 
-        # show it in the lower pane, alongside the Report view and Python console
-        main.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._subwin)
-        report_view = main.findChild(QDockWidget, "Report view")
-        if report_view is not None:
-            main.tabifyDockWidget(report_view, self._subwin)
+        # show it stacked with the Tasks panel
+        main.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._subwin)
+        tasks = main.findChild(QDockWidget, "Tasks")
+        if tasks is not None:
+            main.tabifyDockWidget(tasks, self._subwin)
 
         self._subwin.show()
         self._subwin.raise_()
